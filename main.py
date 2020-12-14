@@ -16,26 +16,95 @@ import time
 import speech_recognition as sr
 from os import path
 from textblob import TextBlob
+from gaze_tracking import GazeTracking
 mysp=__import__("my-voice-analysis")
 
 
 timerFlag=False
 timeHandFold=0
 timerLoopFlag=True
-frame=[]
+gFrame=[]
 textOfSpeech=""
 
 facialExpersionsPresentage=[0,0,0,0,0,0,0] #this array have presentage values of facial experssions.index order of experssions :[happy,sad,netrul,angry,disgust,suprice,fear]
 
 speechSentimentalAnalysis="none" #this variable have string value which denote that sentimental analysis of speech,the values may be "none" or "positive" or "negative" or "neutral"
 
+eyeContactAreaPresentage=[0,0,0,0,0,0] #presentage value array of eye direction area
+"""
+Index   Related Area
+0       Left Far
+1       Left Near
+2       Right Far
+3       Right Near
+4       Centera Far
+5       Centar Near
+"""
+handGesturePositionPresentage=[0,0,0,0] #hand gesture positon as presentages value
+"""
+index   gesture
+0       hand above shoulder(positive)
+1       hand near to shoulder(neutral)
+2       open hand belove shoulde (positive)
+3       close hand belove shoulder (negative)
+
+"""
+ahCountArray=[5,3,0,2,7,4,9,5]
+def eyeGazeTracking(frame,eyeContactAreaCounts,totalEyeContactCounts):
+
+    eyeContactAreaCounts=[10,100,5,150,110,250]
+    totalEyeContactCounts=10+100+5+150+110+250
+    # We send this frame to GazeTracking to analyze it
+    print("gaze")
+    #gaze=GazeTracking()
+    print("frame")
+
+    #gaze.refresh(frame)
+    print("anota")
+    #frame = gaze.annotated_frame()
+    print("condition")
+    """
+    if gaze.is_left():
+        totalEyeContactCounts = totalEyeContactCounts + 1
+        if gaze.vertical_ratio()>=0.5:
+            eyeContactAreaCounts[1] = eyeContactAreaCounts[1] + 1
+            print("left Near")
+        elif gaze.vertical_ratio()<0.5:
+            eyeContactAreaCounts[0]=eyeContactAreaCounts[0]+1
+            print("left far")
+        else:
+            pass
+    elif gaze.is_right():
+        totalEyeContactCounts = totalEyeContactCounts + 1
+        if gaze.vertical_ratio()>=0.5:
+            eyeContactAreaCounts[3] = eyeContactAreaCounts[3] + 1
+            print("right Near")
+        elif gaze.vertical_ratio()<0.5:
+            eyeContactAreaCounts[2] = eyeContactAreaCounts[2] + 1
+            print("right Far")
+        else:
+            pass
+    elif gaze.is_center():
+        totalEyeContactCounts = totalEyeContactCounts + 1
+        if gaze.vertical_ratio()>=0.5:
+            eyeContactAreaCounts[5] = eyeContactAreaCounts[5] + 1
+            print("center Near")
+        elif gaze.vertical_ratio()<0.5:
+            eyeContactAreaCounts[4] = eyeContactAreaCounts[4] + 1
+            print("center Far")
+        else:
+            pass
+    else:
+        pass
+        """
 
 
+    return eyeContactAreaCounts,totalEyeContactCounts
 
 
 def rightHandFold(points):
     if points[2] and points[4]:
-        if points[4][1] > points[2][1]:
+        if points[4][0] > points[2][0]:
             print("right hand fold ")
             return True
         else:
@@ -47,7 +116,7 @@ def leftHandFold(points):
     print("wrist",points[7])
     print("sholder",points[5])
     if points[7] and points[5]:
-        if points[7][1] > points[5][1]:
+        if points[7][0] < points[5][0]:
             print("left hand fold ")
             return True
         else:
@@ -61,10 +130,47 @@ def isHandFold(points):
     else:
         return False
 
+def handGesture(points, gestureCounts, totalGestureCounts):
+    if points[2] and points[5] and points[4] and points[7]:
+
+
+        averageShoulderX = (points[2][1] + points[5][1]) / 2
+        if (averageShoulderX == points[4][1]) and averageShoulderX == points[7][1]:
+            totalGestureCounts=totalGestureCounts+1
+            gestureCounts[0]=gestureCounts[0]+1
+            print("near shoulder")
+        elif (averageShoulderX > points[4][1]) and averageShoulderX > points[7][1]:
+            totalGestureCounts = totalGestureCounts + 1
+            print("shoulder below")
+            if isHandFold(points):
+                gestureCounts[3]=gestureCounts[3]+1
+                print("hand fold")
+            else:
+                gestureCounts[2]=gestureCounts[2]+1
+                print("hand open")
+        elif (averageShoulderX < points[4][1]) and averageShoulderX < points[7][1]:
+            totalGestureCounts = totalGestureCounts + 1
+            gestureCounts[1]=gestureCounts[1]+1
+            print("hand above shoulder")
+        else:
+            pass
+    else:
+        pass
+    return gestureCounts,totalGestureCounts
+
+
 
 def poseEstimate():
     global timerFlag
-    global frame
+    global gFrame
+    global eyeContactAreaPresentage
+    global handGesturePositionPresentage
+
+    eyeContactAreaCounts=[0,0,0,0,0,0]
+    totalEyeContactCounts = 0
+    gestureCounts=[0,0,0,0]
+    totalGestureCounts=0
+
     parser = argparse.ArgumentParser()
     parser.add_argument('--input', help='Path to image or video. Skip to capture frames from camera')
     parser.add_argument('--thr', default=0.2, type=float, help='Threshold value for pose parts heat map')
@@ -93,6 +199,9 @@ def poseEstimate():
 
     while cv2.waitKey(1) < 0:
         hasFrame, frame = cap.read()
+        gFrame=frame
+        eyeContactAreaCounts, totalEyeContactCounts = eyeGazeTracking(frame, eyeContactAreaCounts,
+                                                                      totalEyeContactCounts)
         if not hasFrame:
             cv2.waitKey()
             break
@@ -125,6 +234,9 @@ def poseEstimate():
             timerFlag=True
         else:
             timerFlag=False
+        gestureCounts,totalGestureCounts=handGesture(points,gestureCounts,totalGestureCounts)
+        #eyeContactAreaCounts, totalEyeContactCounts = eyeGazeTracking(frame, eyeContactAreaCounts,totalEyeContactCounts)
+
         #leftHandFold(points)
         #rightHandFold(points)
         #print(points[0])
@@ -146,16 +258,23 @@ def poseEstimate():
 
         t, _ = net.getPerfProfile()
         freq = cv2.getTickFrequency() / 1000
+        print("get")
+        #eyeContactAreaCounts,totalEyeContactCounts=eyeGazeTracking(frame,eyeContactAreaCounts,totalEyeContactCounts)
         cv2.putText(frame, '%.2fms' % (t / freq), (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0))
 
         cv2.imshow('OpenPose using OpenCV', frame)
-
+    for i in range(0,len(eyeContactAreaPresentage)):
+        if totalEyeContactCounts>0:
+            eyeContactAreaPresentage[i]=eyeContactAreaCounts[i]/totalEyeContactCounts*100
+    for i in range(0, len(handGesturePositionPresentage)):
+        if totalGestureCounts>0:
+            handGesturePositionPresentage[i] = gestureCounts[i] / totalGestureCounts * 100
 
 
 def facial_expersion(): #p3_emotion,lock,q
     #speechRate=p1_rate.recv()
     speechRate=0
-    global frame
+    global gFrame
     global timerLoopFlag
     global facialExpersionsPresentage
 
@@ -174,7 +293,7 @@ def facial_expersion(): #p3_emotion,lock,q
     while timerLoopFlag:
         try:
             # facial experssion analyze using deepface library,for that purpose use orginal frame
-            result = DeepFace.analyze(frame, actions=['emotion'])
+            result = DeepFace.analyze(gFrame, actions=['emotion'])
             frameCount=frameCount+1
             if result['dominant_emotion']=="happy":
                 frameCountExpressions[0]=frameCountExpressions[0]+1
@@ -213,7 +332,8 @@ def facial_expersion(): #p3_emotion,lock,q
         print("fep : ",frameCountExpressions[i])
     print("fc :",frameCount)
 
-
+def ahCount():
+    return
 
 def speech_rate():#p2_rate
     global textOfSpeech
@@ -316,6 +436,7 @@ def speech_rate():#p2_rate
     print("text :",text)
     if not text=="":
         speechSentimentalAnalysis=sentimental_analysise(text)
+    ahCount()
 
 
 
@@ -359,7 +480,7 @@ def print_hi(name):
 if __name__ == '__main__':
 
     print_hi('PyCharm')
-    print(len(frame))
+    print(len(gFrame))
 
 
     t2 = threading.Thread(target=poseEstimate)
@@ -373,6 +494,7 @@ if __name__ == '__main__':
     t2.join()
     timerLoopFlag=False
     t3.join()
+    
     t4.join()
     print("text of speech :",textOfSpeech)
     print("sentimetal analysis :",speechSentimentalAnalysis)
@@ -380,6 +502,9 @@ if __name__ == '__main__':
 
     for i in facialExpersionsPresentage:
         print(i)
+    print("eye contact")
+    for p in eyeContactAreaPresentage:
+        print(p)
 
 
 
